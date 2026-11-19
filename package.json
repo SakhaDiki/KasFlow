@@ -1,0 +1,16 @@
+{
+  "name": "catatduit-app",
+  "version": "1.0.0",
+  "description": "Aplikasi pencatat keuangan pribadi CatatDuit",
+  "main": "api/index.js",
+  "scripts": {
+    "start": "node api/index.js",
+    "dev": "nodemon api/index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "mysql2": "^3.12.0"
+  }
+}

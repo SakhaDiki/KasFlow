@@ -80,7 +80,7 @@ app.post('/api/auth/register', async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const [result] = await db.query(
-      'INSERT INTO users (name, email, password) VALUES (?, ?, ?)',
+      'INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)',
       [name, email, hashedPassword]
     );
 
@@ -107,7 +107,12 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     const userRow = rows[0];
-    const valid = await bcrypt.compare(password, userRow.password);
+    const storedHash = userRow.password_hash || userRow.password;
+    if (!storedHash) {
+      return res.status(500).json({ error: 'Data kata sandi pengguna tidak ditemukan di database' });
+    }
+
+    const valid = await bcrypt.compare(password, storedHash);
     if (!valid) {
       return res.status(401).json({ error: 'Email atau kata sandi salah' });
     }

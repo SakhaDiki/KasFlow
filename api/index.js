@@ -93,9 +93,42 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
+// Register
+app.post('/api/auth/register', async (req, res) => {
+  const { name, email, password } = req.body || {};
+  if (!name || !email || !password) {
+    return res.status(400).json({ error: 'Semua kolom wajib diisi' });
+  }
+  try {
+    const db = getPool();
+    const [existing] = await db.query('SELECT id FROM users WHERE email = ?', [email]);
+    if (existing.length > 0) {
+      return res.status(400).json({ error: 'Email sudah terdaftar' });
+    }
+
+    // Cek nama kolom password di tabel users (password_hash vs password)
+    const [cols] = await db.query('SHOW COLUMNS FROM users');
+    const colNames = cols.map(c => c.Field);
+    const passCol = colNames.includes('password_hash') ? 'password_hash' : 'password';
+
+    const hashedPassword = await bcrypt.hash(String(password), 10);
+    const [result] = await db.query(
+      `INSERT INTO users (name, email, ${passCol}) VALUES (?, ?, ?)`,
+      [name, email, hashedPassword]
+    );
+
+    const user = { id: result.insertId, name, email };
+    const token = jwt.sign(user, JWT_SECRET, { expiresIn: '7d' });
+    res.status(201).json({ token, user });
+  } catch (err) {
+    console.error('Register error:', err);
+    res.status(500).json({ error: 'Server error: ' + err.message });
+  }
+});
+
 // Login
 app.post('/api/auth/login', async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password } = req.body || {};
   if (!email || !password) {
     return res.status(400).json({ error: 'Email dan kata sandi wajib diisi' });
   }
@@ -107,12 +140,14 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     const userRow = rows[0];
-    const storedHash = userRow.password_hash || userRow.password;
+    const storedHash = userRow.password_hash || userRow.password || userRow.kata_sandi;
     if (!storedHash) {
-      return res.status(500).json({ error: 'Data kata sandi pengguna tidak ditemukan di database' });
+      return res.status(500).json({
+        error: `Kolom hash password kosong/tidak ditemukan. Kolom tersedia: ${Object.keys(userRow).join(', ')}`
+      });
     }
 
-    const valid = await bcrypt.compare(password, storedHash);
+    const valid = await bcrypt.compare(String(password), String(storedHash));
     if (!valid) {
       return res.status(401).json({ error: 'Email atau kata sandi salah' });
     }

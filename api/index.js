@@ -1,20 +1,15 @@
-require('dotenv').config();
 const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const path = require('path');
+require('dotenv').config();
 
 const app = express();
+const JWT_SECRET = process.env.JWT_SECRET || 'kasflow_secret_key_2026';
+
 app.use(cors());
 app.use(express.json());
-
-if (!process.env.VERCEL) {
-  app.use(express.static(path.join(__dirname, '../public')));
-}
-
-const JWT_SECRET = process.env.JWT_SECRET || 'kasflow_secret_key_2026';
 
 let pool;
 function getPool() {
@@ -25,7 +20,10 @@ function getPool() {
       user: process.env.DB_USER,
       password: process.env.DB_PASSWORD,
       database: process.env.DB_NAME || 'test',
-      ssl: process.env.DB_SSL === 'true' ? { minVersion: 'TLSv1.2', rejectUnauthorized: true } : undefined,
+      ssl: {
+        minVersion: 'TLSv1.2',
+        rejectUnauthorized: true
+      },
       waitForConnections: true,
       connectionLimit: 5,
       queueLimit: 0
@@ -34,84 +32,54 @@ function getPool() {
   return pool;
 }
 
+// Middleware verifikasi JWT
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'Token tidak ditemukan' });
+  if (!token) {
+    return res.status(401).json({ error: 'Token tidak ditemukan. Silakan login kembali.' });
+  }
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) return res.status(403).json({ error: 'Token tidak valid atau kedaluwarsa' });
+    if (err) {
+      return res.status(403).json({ error: 'Sesi berakhir. Silakan login kembali.' });
+    }
     req.user = user;
     next();
   });
 }
 
-// Health check endpoint untuk cek env & koneksi DB di Vercel
+// Health Check Database
 app.get('/api/health', async (req, res) => {
   try {
     const db = getPool();
     await db.query('SELECT 1');
-    res.json({
-      status: 'ok',
-      dbConnected: true,
-      hasDbHost: Boolean(process.env.DB_HOST)
-    });
+    res.json({ status: 'ok', database: 'connected' });
   } catch (err) {
-    res.status(500).json({
-      status: 'error',
-      message: err.message,
-      hasDbHost: Boolean(process.env.DB_HOST)
-    });
+    res.status(500).json({ status: 'error', message: err.message });
   }
 });
 
-// Register
-app.post('/api/auth/register', async (req, res) => {
-  const { name, email, password } = req.body;
-  if (!name || !email || !password) {
-    return res.status(400).json({ error: 'Semua kolom wajib diisi' });
-  }
-  try {
-    const db = getPool();
-    const [existing] = await db.query('SELECT id FROM users WHERE email = ?', [email]);
-    if (existing.length > 0) {
-      return res.status(400).json({ error: 'Email sudah terdaftar' });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const [result] = await db.query(
-      'INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)',
-      [name, email, hashedPassword]
-    );
-
-    const user = { id: result.insertId, name, email };
-    const token = jwt.sign(user, JWT_SECRET, { expiresIn: '7d' });
-    res.status(201).json({ token, user });
-  } catch (err) {
-    console.error('Register error:', err);
-    res.status(500).json({ error: 'Server error: ' + err.message });
-  }
-});
-
-// Register
+// Register (Hanya 1 endpoint bersih)
 app.post('/api/auth/register', async (req, res) => {
   const { name, email, password } = req.body || {};
   if (!name || !email || !password) {
-    return res.status(400).json({ error: 'Semua kolom wajib diisi' });
+    return res.status(400).json({ error: 'Nama, email, dan kata sandi wajib diisi' });
   }
+
   try {
     const db = getPool();
     const [existing] = await db.query('SELECT id FROM users WHERE email = ?', [email]);
     if (existing.length > 0) {
-      return res.status(400).json({ error: 'Email sudah terdaftar' });
+      return res.status(409).json({ error: 'Email sudah terdaftar' });
     }
 
-    // Cek nama kolom password di tabel users (password_hash vs password)
-    const [cols] = await db.query('SHOW COLUMNS FROM users');
-    const colNames = cols.map(c => c.Field);
-    const passCol = colNames.includes('password_hash') ? 'password_hash' : 'password';
-
     const hashedPassword = await bcrypt.hash(String(password), 10);
+
+    // Cek nama kolom password di tabel users (password_hash atau password)
+    const [cols] = await db.query("SHOW COLUMNS FROM users LIKE 'password_hash'");
+    const passCol = cols.length > 0 ? 'password_hash' : 'password';
+
     const [result] = await db.query(
       `INSERT INTO users (name, email, ${passCol}) VALUES (?, ?, ?)`,
       [name, email, hashedPassword]
@@ -126,12 +94,13 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-// Login
+// Login (Hanya 1 endpoint bersih)
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body || {};
   if (!email || !password) {
     return res.status(400).json({ error: 'Email dan kata sandi wajib diisi' });
   }
+
   try {
     const db = getPool();
     const [rows] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
@@ -140,10 +109,10 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     const userRow = rows[0];
-    const storedHash = userRow.password_hash || userRow.password || userRow.kata_sandi;
+    const storedHash = userRow.password_hash || userRow.password;
     if (!storedHash) {
       return res.status(500).json({
-        error: `Kolom hash password kosong/tidak ditemukan. Kolom tersedia: ${Object.keys(userRow).join(', ')}`
+        error: `Hash password kosong di database. Kolom tersedia: ${Object.keys(userRow).join(', ')}`
       });
     }
 
@@ -165,29 +134,28 @@ app.post('/api/auth/login', async (req, res) => {
 app.get('/api/categories', authenticateToken, async (req, res) => {
   try {
     const db = getPool();
-    const [rows] = await db.query(
-      'SELECT * FROM categories WHERE user_id IS NULL OR user_id = ? ORDER BY type, name',
-      [req.user.id]
-    );
+    const [rows] = await db.query('SELECT * FROM categories ORDER BY id ASC');
     res.json(rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Gagal memuat kategori: ' + err.message });
   }
 });
 
-// Create Category
+// Add Category
 app.post('/api/categories', authenticateToken, async (req, res) => {
-  const { name, type } = req.body;
-  if (!name || !type) return res.status(400).json({ error: 'Nama dan tipe kategori wajib diisi' });
+  const { name, type } = req.body || {};
+  if (!name || !type) {
+    return res.status(400).json({ error: 'Nama dan tipe kategori wajib diisi' });
+  }
   try {
     const db = getPool();
     const [result] = await db.query(
-      'INSERT INTO categories (user_id, name, type) VALUES (?, ?, ?)',
-      [req.user.id, name, type]
+      'INSERT INTO categories (name, type) VALUES (?, ?)',
+      [name, type]
     );
     res.status(201).json({ id: result.insertId, name, type });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Gagal menambah kategori: ' + err.message });
   }
 });
 
@@ -196,34 +164,42 @@ app.get('/api/transactions', authenticateToken, async (req, res) => {
   try {
     const db = getPool();
     const [rows] = await db.query(
-      `SELECT t.id, t.amount, t.transaction_date, t.note, c.name AS category, c.type
+      `SELECT t.*, c.name AS category_name, c.type AS category_type
        FROM transactions t
-       JOIN categories c ON t.category_id = c.id
+       LEFT JOIN categories c ON t.category_id = c.id
        WHERE t.user_id = ?
-       ORDER BY t.transaction_date DESC, t.id DESC`,
+       ORDER BY t.date DESC, t.id DESC`,
       [req.user.id]
     );
     res.json(rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Gagal memuat transaksi: ' + err.message });
   }
 });
 
 // Add Transaction
 app.post('/api/transactions', authenticateToken, async (req, res) => {
-  const { category_id, amount, transaction_date, note } = req.body;
-  if (!category_id || !amount || !transaction_date) {
-    return res.status(400).json({ error: 'Kategori, nominal, dan tanggal wajib diisi' });
+  const { category_id, amount, type, description, date } = req.body || {};
+  if (!category_id || !amount || !type || !date) {
+    return res.status(400).json({ error: 'Kategori, jumlah, tipe, dan tanggal wajib diisi' });
   }
   try {
     const db = getPool();
     const [result] = await db.query(
-      'INSERT INTO transactions (user_id, category_id, amount, transaction_date, note) VALUES (?, ?, ?, ?, ?)',
-      [req.user.id, category_id, amount, transaction_date, note || '']
+      'INSERT INTO transactions (user_id, category_id, amount, type, description, date) VALUES (?, ?, ?, ?, ?, ?)',
+      [req.user.id, category_id, amount, type, description || '', date]
     );
-    res.status(201).json({ id: result.insertId });
+    res.status(201).json({
+      id: result.insertId,
+      user_id: req.user.id,
+      category_id,
+      amount,
+      type,
+      description: description || '',
+      date
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Gagal menyimpan transaksi: ' + err.message });
   }
 });
 
@@ -231,17 +207,24 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
 app.delete('/api/transactions/:id', authenticateToken, async (req, res) => {
   try {
     const db = getPool();
-    await db.query('DELETE FROM transactions WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
-    res.json({ success: true });
+    const [result] = await db.query(
+      'DELETE FROM transactions WHERE id = ? AND user_id = ?',
+      [req.params.id, req.user.id]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Transaksi tidak ditemukan' });
+    }
+    res.json({ message: 'Transaksi berhasil dihapus' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Gagal menghapus transaksi: ' + err.message });
   }
 });
 
+// Jalankan server lokal jika tidak di Vercel
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, () => {
-    console.log(`Server KasFlow aktif di http://localhost:${PORT}`);
+    console.log(`Server berjalan di http://localhost:${PORT}`);
   });
 }
 

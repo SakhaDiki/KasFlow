@@ -60,7 +60,7 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
-// Register (Hanya 1 endpoint bersih)
+// Register
 app.post('/api/auth/register', async (req, res) => {
   const { name, email, password } = req.body || {};
   if (!name || !email || !password) {
@@ -75,8 +75,6 @@ app.post('/api/auth/register', async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(String(password), 10);
-
-    // Cek nama kolom password di tabel users (password_hash atau password)
     const [cols] = await db.query("SHOW COLUMNS FROM users LIKE 'password_hash'");
     const passCol = cols.length > 0 ? 'password_hash' : 'password';
 
@@ -94,7 +92,7 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-// Login (Hanya 1 endpoint bersih)
+// Login
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body || {};
   if (!email || !password) {
@@ -130,11 +128,14 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// Get Categories
+// Get Categories (global + milik user)
 app.get('/api/categories', authenticateToken, async (req, res) => {
   try {
     const db = getPool();
-    const [rows] = await db.query('SELECT * FROM categories ORDER BY id ASC');
+    const [rows] = await db.query(
+      'SELECT * FROM categories WHERE user_id IS NULL OR user_id = ? ORDER BY id ASC',
+      [req.user.id]
+    );
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: 'Gagal memuat kategori: ' + err.message });
@@ -150,25 +151,36 @@ app.post('/api/categories', authenticateToken, async (req, res) => {
   try {
     const db = getPool();
     const [result] = await db.query(
-      'INSERT INTO categories (name, type) VALUES (?, ?)',
-      [name, type]
+      'INSERT INTO categories (user_id, name, type) VALUES (?, ?, ?)',
+      [req.user.id, name, type]
     );
-    res.status(201).json({ id: result.insertId, name, type });
+    res.status(201).json({ id: result.insertId, user_id: req.user.id, name, type });
   } catch (err) {
     res.status(500).json({ error: 'Gagal menambah kategori: ' + err.message });
   }
 });
 
-// Get Transactions
+// Get Transactions (sesuai kolom asli: transaction_date, note, dan join c.type)
 app.get('/api/transactions', authenticateToken, async (req, res) => {
   try {
     const db = getPool();
     const [rows] = await db.query(
-      `SELECT t.*, c.name AS category_name, c.type AS category_type
+      `SELECT 
+         t.id,
+         t.user_id,
+         t.category_id,
+         t.amount,
+         t.transaction_date,
+         t.transaction_date AS date,
+         t.note,
+         t.note AS description,
+         c.name AS category_name,
+         c.type AS type,
+         c.type AS category_type
        FROM transactions t
        LEFT JOIN categories c ON t.category_id = c.id
        WHERE t.user_id = ?
-       ORDER BY t.date DESC, t.id DESC`,
+       ORDER BY t.transaction_date DESC, t.id DESC`,
       [req.user.id]
     );
     res.json(rows);
@@ -177,26 +189,30 @@ app.get('/api/transactions', authenticateToken, async (req, res) => {
   }
 });
 
-// Add Transaction
+// Add Transaction (menerima baik transaction_date/date maupun note/description)
 app.post('/api/transactions', authenticateToken, async (req, res) => {
-  const { category_id, amount, type, description, date } = req.body || {};
-  if (!category_id || !amount || !type || !date) {
-    return res.status(400).json({ error: 'Kategori, jumlah, tipe, dan tanggal wajib diisi' });
+  const { category_id, amount, transaction_date, date, note, description } = req.body || {};
+  const finalDate = transaction_date || date;
+  const finalNote = note !== undefined ? note : (description || '');
+
+  if (!category_id || !amount || !finalDate) {
+    return res.status(400).json({ error: 'Kategori, jumlah, dan tanggal wajib diisi' });
   }
   try {
     const db = getPool();
     const [result] = await db.query(
-      'INSERT INTO transactions (user_id, category_id, amount, type, description, date) VALUES (?, ?, ?, ?, ?, ?)',
-      [req.user.id, category_id, amount, type, description || '', date]
+      'INSERT INTO transactions (user_id, category_id, amount, transaction_date, note) VALUES (?, ?, ?, ?, ?)',
+      [req.user.id, category_id, amount, finalDate, finalNote]
     );
     res.status(201).json({
       id: result.insertId,
       user_id: req.user.id,
       category_id,
       amount,
-      type,
-      description: description || '',
-      date
+      transaction_date: finalDate,
+      date: finalDate,
+      note: finalNote,
+      description: finalNote
     });
   } catch (err) {
     res.status(500).json({ error: 'Gagal menyimpan transaksi: ' + err.message });
@@ -220,7 +236,6 @@ app.delete('/api/transactions/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Jalankan server lokal jika tidak di Vercel
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, () => {

@@ -128,6 +128,38 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+
+// Change Password
+app.post('/api/auth/change-password', authenticateToken, async (req, res) => {
+  const { currentPassword, newPassword } = req.body || {};
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'Kata sandi lama dan baru wajib diisi' });
+  }
+  if (String(newPassword).length < 6) {
+    return res.status(400).json({ error: 'Kata sandi baru minimal 6 karakter' });
+  }
+  try {
+    const db = getPool();
+    const [rows] = await db.query('SELECT * FROM users WHERE id = ?', [req.user.id]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Pengguna tidak ditemukan' });
+    }
+    const userRow = rows[0];
+    const storedHash = userRow.password_hash || userRow.password;
+    const isMatch = await bcrypt.compare(String(currentPassword), String(storedHash));
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Kata sandi lama tidak sesuai' });
+    }
+    const newHash = await bcrypt.hash(String(newPassword), 10);
+    const col = userRow.password_hash !== undefined ? 'password_hash' : 'password';
+    await db.query(`UPDATE users SET ${col} = ? WHERE id = ?`, [newHash, req.user.id]);
+    res.json({ message: 'Kata sandi berhasil diperbarui!' });
+  } catch (err) {
+    console.error('Change password error:', err);
+    res.status(500).json({ error: 'Gagal memperbarui kata sandi: ' + err.message });
+  }
+});
+
 // Get Categories (global + milik user)
 app.get('/api/categories', authenticateToken, async (req, res) => {
   try {

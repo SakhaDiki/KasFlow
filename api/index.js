@@ -1,4 +1,4 @@
-﻿const express = require('express');
+﻿ const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
@@ -60,6 +60,7 @@ function authenticateToken(req, res, next) {
   });
 }
 
+// Health Check
 app.get('/api/health', async (req, res) => {
   try {
     const db = getPool();
@@ -193,4 +194,4 @@ app.post('/api/auth/update-account', authenticateToken, async (req, res) => {
     const updatedUser = { id: userRow.id, name: userRow.name, username: finalUsername };
     const newToken = jwt.sign(updatedUser, JWT_SECRET, { expiresIn: '7d' });
 
-    res.json({ message: 'Akun berhasil diperbarui!',
+    res.json({ message: 'Akun berhasil diperbarui', token: newToken, user: updatedUser });

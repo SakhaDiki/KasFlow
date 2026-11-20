@@ -1,9 +1,9 @@
- <!DOCTYPE html>
+﻿ <!DOCTYPE html>
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>KasFlow — Personal Finance & Cashflow Tracker</title>
+  <title>KasFlow â€” Personal Finance & Cashflow Tracker</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -41,7 +41,7 @@
         </div>
         <div>
           <label class="block text-xs font-medium text-slate-300 mb-1.5">Kata Sandi</label>
-          <input type="password" id="loginPassword" required placeholder="••••••••" class="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:outline-none focus:border-emerald-500">
+          <input type="password" id="loginPassword" required placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" class="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:outline-none focus:border-emerald-500">
         </div>
         <button type="submit" id="btnLogin" class="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-sm transition cursor-pointer">Masuk ke Dashboard</button>
       </form>
@@ -58,7 +58,7 @@
         </div>
         <div>
           <label class="block text-xs font-medium text-slate-300 mb-1.5">Kata Sandi (Min. 6 Karakter)</label>
-          <input type="password" id="regPassword" required minlength="6" placeholder="••••••••" class="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:outline-none focus:border-emerald-500">
+          <input type="password" id="regPassword" required minlength="6" placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" class="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:outline-none focus:border-emerald-500">
         </div>
         <button type="submit" id="btnRegister" class="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-sm transition cursor-pointer">Buat Akun & Masuk</button>
       </form>
@@ -333,7 +333,7 @@
           dailyNet[dateStr] = (dailyNet[dateStr] || 0) + amt;
         } else {
           expense += amt;
-          expenseByCat[t.category] = (expenseByCat[t.category] || 0) + amt;
+          expenseByCat[(t.category_name || t.category || 'Lainnya')] = (expenseByCat[(t.category_name || t.category || 'Lainnya')] || 0) + amt;
           dailyNet[dateStr] = (dailyNet[dateStr] || 0) - amt;
         }
       });
@@ -349,7 +349,7 @@
           <tr class="hover:bg-slate-800/40 transition">
             <td class="py-3 px-3 text-xs text-slate-300">${String(t.transaction_date).slice(0, 10)}</td>
             <td class="py-3 px-3">
-              <span class="px-2.5 py-1 rounded-lg text-xs font-medium ${t.type === 'INCOME' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300'}">${t.category}</span>
+              <span class="px-2.5 py-1 rounded-lg text-xs font-medium ${t.type === 'INCOME' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300'}">${(t.category_name || t.category || 'Lainnya')}</span>
             </td>
             <td class="py-3 px-3 text-xs text-slate-400">${t.note || '-'}</td>
             <td class="py-3 px-3 text-right font-semibold text-xs ${t.type === 'INCOME' ? 'text-emerald-400' : 'text-rose-400'}">

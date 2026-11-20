@@ -496,21 +496,31 @@
         btnSave.disabled = true;
         btnSave.textContent = 'Menyimpan...';
         try {
-          const token = localStorage.getItem('kasflow_token') || localStorage.getItem('token');
-          const res = await (typeof authFetch === 'function'
-            ? authFetch('/api/auth/update-account', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ currentPassword, newUsername, newPassword })
-              })
-            : fetch('/api/auth/update-account', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  ...(token ? { 'Authorization': 'Bearer ' + token } : {})
-                },
-                body: JSON.stringify({ currentPassword, newUsername, newPassword })
-              }));
+          // Cari token dari key spesifik maupun scan otomatis localStorage
+          let token = localStorage.getItem('kasflow_token') || localStorage.getItem('kasflow_token') || localStorage.getItem('token');
+          if (!token) {
+            for (let i = 0; i < localStorage.length; i++) {
+              const k = localStorage.key(i);
+              const v = localStorage.getItem(k);
+              if (v && v.startsWith('eyJ') && v.split('.').length === 3) {
+                token = v;
+                break;
+              }
+            }
+          }
+          if (!token) {
+            passFeedback.textContent = 'Sesi lokal tidak ditemukan. Silakan klik Keluar lalu Login ulang.';
+            passFeedback.classList.add('text-rose-400');
+            return;
+          }
+          const res = await fetch('/api/auth/update-account', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify({ currentPassword, newUsername, newPassword })
+          });
           const data = await res.json();
           if (!res.ok) {
             passFeedback.textContent = data.error || 'Gagal memperbarui akun.';
@@ -521,8 +531,8 @@
               localStorage.setItem('token', data.token);
             }
             if (data.user) {
-              localStorage.setItem('kasflow_user', JSON.stringify(data.user));
-              localStorage.setItem('user', JSON.stringify(data.user));
+              const userKey = ["kasflow_token","kasflow_user","user","token"].find(k => /user/i.test(k)) || 'kasflow_user';
+              localStorage.setItem(userKey, JSON.stringify(data.user));
             }
             passFeedback.textContent = data.message || 'Akun berhasil diperbarui!';
             passFeedback.classList.add('text-emerald-400');

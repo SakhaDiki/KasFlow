@@ -74,8 +74,8 @@ app.get('/api/health', async (req, res) => {
 
 // Register (Username + Password)
 app.post('/api/auth/register', async (req, res) => {
-  const { name, username, password } = req.body || {};
-  const cleanUser = String(username || '').trim().toLowerCase();
+  const { name, username, email, password } = req.body || {};
+  const cleanUser = String(username || email || '').trim().toLowerCase();
   if (!cleanUser || !password) {
     return res.status(400).json({ error: 'Username dan kata sandi wajib diisi' });
   }
@@ -107,8 +107,8 @@ app.post('/api/auth/register', async (req, res) => {
 
 // Login (Username + Password)
 app.post('/api/auth/login', async (req, res) => {
-  const { username, password } = req.body || {};
-  const cleanUser = String(username || '').trim().toLowerCase();
+  const { username, email, password } = req.body || {};
+  const cleanUser = String(username || email || '').trim().toLowerCase();
   if (!cleanUser || !password) {
     return res.status(400).json({ error: 'Username dan kata sandi wajib diisi' });
   }

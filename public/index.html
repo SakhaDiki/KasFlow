@@ -496,22 +496,34 @@
         btnSave.disabled = true;
         btnSave.textContent = 'Menyimpan...';
         try {
-          const token = localStorage.getItem('token');
-          const res = await fetch('/api/auth/update-account', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(token ? { 'Authorization': 'Bearer ' + token } : {})
-            },
-            body: JSON.stringify({ currentPassword, newUsername, newPassword })
-          });
+          const token = localStorage.getItem('kasflow_token') || localStorage.getItem('token');
+          const res = await (typeof authFetch === 'function'
+            ? authFetch('/api/auth/update-account', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ currentPassword, newUsername, newPassword })
+              })
+            : fetch('/api/auth/update-account', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(token ? { 'Authorization': 'Bearer ' + token } : {})
+                },
+                body: JSON.stringify({ currentPassword, newUsername, newPassword })
+              }));
           const data = await res.json();
           if (!res.ok) {
             passFeedback.textContent = data.error || 'Gagal memperbarui akun.';
             passFeedback.classList.add('text-rose-400');
           } else {
-            if (data.token) localStorage.setItem('token', data.token);
-            if (data.user) localStorage.setItem('user', JSON.stringify(data.user));
+            if (data.token) {
+              localStorage.setItem('kasflow_token', data.token);
+              localStorage.setItem('token', data.token);
+            }
+            if (data.user) {
+              localStorage.setItem('kasflow_user', JSON.stringify(data.user));
+              localStorage.setItem('user', JSON.stringify(data.user));
+            }
             passFeedback.textContent = data.message || 'Akun berhasil diperbarui!';
             passFeedback.classList.add('text-emerald-400');
             setTimeout(() => togglePassModal(false), 1200);

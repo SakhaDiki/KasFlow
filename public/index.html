@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
@@ -124,7 +124,7 @@
           </div>
           <div>
             <label class="block text-xs text-slate-400 mb-1">Nominal (Rp)</label>
-            <input type="number" id="txAmount" required min="1" step="any" placeholder="50000" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm">
+            <input type="text" inputmode="numeric" id="txAmount" required placeholder="500.000" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm">
           </div>
           <div>
             <label class="block text-xs text-slate-400 mb-1">Tanggal</label>
@@ -166,6 +166,13 @@
     let lineChart = null;
 
     document.getElementById('txDate').valueAsDate = new Date();
+
+    // Auto-format ribuan dinamis (contoh: 500.000, 1.250.000)
+    const txAmountInput = document.getElementById('txAmount');
+    txAmountInput.addEventListener('input', function () {
+      const digits = this.value.replace(/\D/g, '');
+      this.value = digits ? digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '';
+    });
 
     function formatRupiah(num) {
       return 'Rp ' + Number(num || 0).toLocaleString('id-ID');
@@ -401,17 +408,20 @@
 
     document.getElementById('txForm').addEventListener('submit', async (e) => {
       e.preventDefault();
+      const cleanAmount = Number(String(txAmountInput.value).replace(/\./g, ''));
+      if (!cleanAmount || cleanAmount <= 0) return;
+
       const res = await authFetch('/api/transactions', {
         method: 'POST',
         body: JSON.stringify({
           category_id: document.getElementById('txCategory').value,
-          amount: document.getElementById('txAmount').value,
+          amount: cleanAmount,
           transaction_date: document.getElementById('txDate').value,
           note: document.getElementById('txNote').value
         })
       });
       if (res.ok) {
-        document.getElementById('txAmount').value = '';
+        txAmountInput.value = '';
         document.getElementById('txNote').value = '';
         await loadTransactions();
       }
@@ -468,7 +478,7 @@
         passModal.classList.toggle('flex', show);
         if (show) {
           try {
-            const savedUser = JSON.parse(localStorage.getItem('user') || '{}');
+            const savedUser = JSON.parse(localStorage.getItem('user') || localStorage.getItem('kasflow_user') || '{}');
             const userInput = document.getElementById('newUsername');
             if (userInput && savedUser.username) userInput.value = savedUser.username;
           } catch (_) {}
@@ -496,8 +506,7 @@
         btnSave.disabled = true;
         btnSave.textContent = 'Menyimpan...';
         try {
-          // Cari token dari key spesifik maupun scan otomatis localStorage
-          let token = localStorage.getItem('kasflow_token') || localStorage.getItem('kasflow_token') || localStorage.getItem('token');
+          let token = localStorage.getItem('kasflow_token') || localStorage.getItem('token');
           if (!token) {
             for (let i = 0; i < localStorage.length; i++) {
               const k = localStorage.key(i);
@@ -549,4 +558,4 @@
     })();
   </script>
 </body>
-</html> 
+</html>

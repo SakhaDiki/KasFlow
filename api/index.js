@@ -195,3 +195,80 @@ app.post('/api/auth/update-account', authenticateToken, async (req, res) => {
     const newToken = jwt.sign(updatedUser, JWT_SECRET, { expiresIn: '7d' });
 
     res.json({ message: 'Akun berhasil diperbarui', token: newToken, user: updatedUser });
+    } catch (err) {
+    res.status(500).json({ error: 'Gagal memperbarui akun: ' + err.message });
+  }
+});
+
+app.get('/api/categories', authenticateToken, async (req, res) => {
+  try {
+    const db = getPool();
+    const [rows] = await db.query('SELECT * FROM categories WHERE user_id IS NULL OR user_id = ? ORDER BY id ASC', [req.user.id]);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/categories', authenticateToken, async (req, res) => {
+  const { name, type } = req.body || {};
+  if (!name || !type) return res.status(400).json({ error: 'Nama dan tipe kategori wajib diisi' });
+  try {
+    const db = getPool();
+    const [result] = await db.query('INSERT INTO categories (user_id, name, type) VALUES (?, ?, ?)', [req.user.id, name, type]);
+    res.status(201).json({ id: result.insertId, user_id: req.user.id, name, type });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/transactions', authenticateToken, async (req, res) => {
+  try {
+    const db = getPool();
+    const [rows] = await db.query(
+      `SELECT t.id, t.user_id, t.category_id, t.amount, t.transaction_date, t.transaction_date AS date,
+              t.note, t.note AS description, c.name AS category_name, c.type AS type, c.type AS category_type
+       FROM transactions t LEFT JOIN categories c ON t.category_id = c.id
+       WHERE t.user_id = ? ORDER BY t.transaction_date DESC, t.id DESC`,
+      [req.user.id]
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/transactions', authenticateToken, async (req, res) => {
+  const { category_id, amount, transaction_date, date, note, description } = req.body || {};
+  const finalDate = transaction_date || date;
+  const finalNote = note !== undefined ? note : (description || '');
+  if (!category_id || !amount || !finalDate) return res.status(400).json({ error: 'Kategori, jumlah, dan tanggal wajib diisi' });
+  try {
+    const db = getPool();
+    const [result] = await db.query(
+      'INSERT INTO transactions (user_id, category_id, amount, transaction_date, note) VALUES (?, ?, ?, ?, ?)',
+      [req.user.id, category_id, amount, finalDate, finalNote]
+    );
+    res.status(201).json({ id: result.insertId, user_id: req.user.id, category_id, amount, transaction_date: finalDate, date: finalDate, note: finalNote, description: finalNote });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/transactions/:id', authenticateToken, async (req, res) => {
+  try {
+    const db = getPool();
+    const [result] = await db.query('DELETE FROM transactions WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'Transaksi tidak ditemukan' });
+    res.json({ message: 'Transaksi berhasil dihapus' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+if (require.main === module) {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => console.log(`Server berjalan di http://localhost:${PORT}`));
+}
+
+module.exports = app;
